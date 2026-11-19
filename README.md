@@ -5,7 +5,7 @@ CSC1057 IT Architecture, Group Nuvola, Project Part 3.
 
 > All data is fictional sample data. Demo accounts only.
 
-**Live prototype:** _add the CloudFront link after deploying_
+**Live prototype:** https://d2gnxounew3gia.cloudfront.net
 
 ## Demo accounts
 
@@ -45,7 +45,7 @@ flowchart LR
   L4 -->|re-check password| COG
 ```
 
-Everything runs in **eu-west-1 (Ireland)** and is defined in one CloudFormation/SAM template (`template.yaml`).
+Everything runs in **eu-north-1 (Stockholm)** and is defined in one CloudFormation/SAM template (`template.yaml`). Part 2 designs for Ireland (eu-west-1); our AWS Free plan account only allows Stockholm, which is still in the EU, so GDPR data residency holds. Moving to Ireland is a one-line change in `scripts/deploy.sh`.
 
 ### Prototype vs the Part 2 design
 
@@ -87,7 +87,7 @@ Everything runs in **eu-west-1 (Ireland)** and is defined in one CloudFormation/
 
 ## Deploy (AWS CloudShell)
 
-1. Sign in to the AWS console, switch the Region to **Europe (Ireland) eu-west-1**, open **CloudShell** (bottom left).
+1. Sign in to the AWS console and open **CloudShell** (bottom left). The script deploys to eu-north-1 automatically.
 2. Run:
    ```bash
    git clone https://github.com/EmirDemirkol/qualitylink-prototype.git
