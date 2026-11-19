@@ -11,7 +11,7 @@
 set -euo pipefail
 
 STACK="qualitylink"
-REGION="eu-west-1"
+REGION="eu-north-1"
 cd "$(dirname "$0")/.."
 
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
