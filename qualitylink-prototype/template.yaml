@@ -1,0 +1,337 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  QualityLink prototype (CSC1057 Group Nuvola). A serverless slice of the
+  Part 2 architecture: CloudFront + S3 front end, Cognito sign-in, API Gateway
+  with a JWT authorizer, one Lambda per module and DynamoDB. Region: eu-west-1.
+
+Parameters:
+  DemoPassword:
+    Type: String
+    NoEcho: true
+    Default: Nuvola-Demo-2026
+    Description: Password for the four demo accounts (sample data only).
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    MemorySize: 256
+    Timeout: 10
+    CodeUri: backend/
+    Environment:
+      Variables:
+        BATCHES_TABLE: !Ref BatchesTable
+        READINGS_TABLE: !Ref ReadingsTable
+        DEVIATIONS_TABLE: !Ref DeviationsTable
+        AUDIT_TABLE: !Ref AuditTable
+        USER_POOL_CLIENT_ID: !Ref UserPoolClient
+
+Resources:
+  # ---------------------------------------------------------------- Identity
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: qualitylink-users
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true   # no self sign-up: accounts are issued by Meridian
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      Schema:
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+        - Name: organisation
+          AttributeDataType: String
+          Mutable: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: qualitylink-web
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      IdTokenValidity: 60
+      AccessTokenValidity: 60
+      RefreshTokenValidity: 1
+      TokenValidityUnits: {IdToken: minutes, AccessToken: minutes, RefreshToken: days}
+
+  OperatorGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: {UserPoolId: !Ref UserPool, GroupName: operator, Description: Line operators, Precedence: 4}
+  EngineerGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: {UserPoolId: !Ref UserPool, GroupName: engineer, Description: Quality engineers, Precedence: 2}
+  QaGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: {UserPoolId: !Ref UserPool, GroupName: qa, Description: QA approvers, Precedence: 1}
+  ClientGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: {UserPoolId: !Ref UserPool, GroupName: client, Description: Client portal users, Precedence: 5}
+
+  # -------------------------------------------------------------------- Data
+  # Provisioned at 5 RCU / 5 WCU each: 20 in total, inside the always-free 25.
+  BatchesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
+      AttributeDefinitions: [{AttributeName: batchId, AttributeType: S}]
+      KeySchema: [{AttributeName: batchId, KeyType: HASH}]
+
+  ReadingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
+      AttributeDefinitions:
+        - {AttributeName: batchId, AttributeType: S}
+        - {AttributeName: readingId, AttributeType: S}
+      KeySchema:
+        - {AttributeName: batchId, KeyType: HASH}
+        - {AttributeName: readingId, KeyType: RANGE}
+
+  DeviationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
+      AttributeDefinitions:
+        - {AttributeName: batchId, AttributeType: S}
+        - {AttributeName: deviationId, AttributeType: S}
+      KeySchema:
+        - {AttributeName: batchId, KeyType: HASH}
+        - {AttributeName: deviationId, KeyType: RANGE}
+
+  AuditTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
+      AttributeDefinitions:
+        - {AttributeName: pk, AttributeType: S}
+        - {AttributeName: sk, AttributeType: S}
+      KeySchema:
+        - {AttributeName: pk, KeyType: HASH}
+        - {AttributeName: sk, KeyType: RANGE}
+
+  # --------------------------------------------------------------------- API
+  QualityLinkApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: [!Sub "https://${SiteDistribution.DomainName}"]
+        AllowHeaders: [authorization, content-type]
+        AllowMethods: [GET, POST, PATCH, OPTIONS]
+        MaxAge: 600
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+      Auth:
+        DefaultAuthorizer: CognitoJwt
+        Authorizers:
+          CognitoJwt:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+              audience: [!Ref UserPoolClient]
+
+  # ----------------------------------------------- Lambda modules (Part 2)
+  # Each module has its own IAM role with only the permissions it needs.
+  BatchesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: batches.handler
+      Description: Batch records and client portal (read only)
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:Scan]
+              Resource: [!GetAtt BatchesTable.Arn, !GetAtt ReadingsTable.Arn, !GetAtt DeviationsTable.Arn]
+            - Effect: Allow
+              Action: [dynamodb:PutItem]
+              Resource: !GetAtt AuditTable.Arn
+      Events:
+        List: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: GET, Path: /batches}}
+        Get: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: GET, Path: "/batches/{batchId}"}}
+        Certificate: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: GET, Path: "/batches/{batchId}/certificate"}}
+
+  InspectionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: inspection.handler
+      Description: Inspection + specification check + hold
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !GetAtt BatchesTable.Arn
+            - Effect: Allow
+              Action: [dynamodb:PutItem, dynamodb:Query]
+              Resource: [!GetAtt ReadingsTable.Arn, !GetAtt DeviationsTable.Arn]
+            - Effect: Allow
+              Action: [dynamodb:PutItem]
+              Resource: !GetAtt AuditTable.Arn
+      Events:
+        Record: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: POST, Path: "/batches/{batchId}/readings"}}
+
+  DeviationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: deviations.handler
+      Description: Deviation investigation and hold clearance
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:Scan, dynamodb:UpdateItem]
+              Resource: !GetAtt DeviationsTable.Arn
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !GetAtt BatchesTable.Arn
+            - Effect: Allow
+              Action: [dynamodb:Query]
+              Resource: !GetAtt ReadingsTable.Arn
+            - Effect: Allow
+              Action: [dynamodb:PutItem]
+              Resource: !GetAtt AuditTable.Arn
+      Events:
+        List: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: GET, Path: /deviations}}
+        Update: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: PATCH, Path: "/batches/{batchId}/deviations/{deviationId}"}}
+
+  ReleaseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: release.handler
+      Description: Batch release with electronic signature (only module that can release)
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !GetAtt BatchesTable.Arn
+            - Effect: Allow
+              Action: [dynamodb:Query]
+              Resource: [!GetAtt ReadingsTable.Arn, !GetAtt DeviationsTable.Arn]
+            - Effect: Allow
+              Action: [dynamodb:PutItem]
+              Resource: !GetAtt AuditTable.Arn
+      Events:
+        Release: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: POST, Path: "/batches/{batchId}/release"}}
+
+  AuditFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: audit_trail.handler
+      Description: Audit trail (read only)
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:Query]
+              Resource: !GetAtt AuditTable.Arn
+      Events:
+        List: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: GET, Path: /audit}}
+
+  # Admin tool for the demo only: loads sample data and demo users. No API route.
+  SeedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: seed.handler
+      Description: Demo data reset (admin only, not exposed through the API)
+      Timeout: 60
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPool
+          DEMO_PASSWORD: !Ref DemoPassword
+          AWS_RETRY_MODE: adaptive
+          AWS_MAX_ATTEMPTS: "10"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:Scan, dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:BatchWriteItem]
+              Resource: [!GetAtt BatchesTable.Arn, !GetAtt ReadingsTable.Arn, !GetAtt DeviationsTable.Arn, !GetAtt AuditTable.Arn]
+            - Effect: Allow
+              Action: [cognito-idp:AdminCreateUser, cognito-idp:AdminUpdateUserAttributes,
+                       cognito-idp:AdminSetUserPassword, cognito-idp:AdminAddUserToGroup]
+              Resource: !GetAtt UserPool.Arn
+
+  # ---------------------------------------------------------- Front end
+  # Private S3 bucket. Only CloudFront can read it (Origin Access Control).
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+
+  SiteOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-site-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: QualityLink prototype
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOriginAccessControl.Id
+            S3OriginConfig: {OriginAccessIdentity: ""}
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6          # Managed-CachingOptimized
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # Managed-SecurityHeadersPolicy
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: cloudfront.amazonaws.com}
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}"
+
+Outputs:
+  WebsiteUrl:
+    Value: !Sub "https://${SiteDistribution.DomainName}"
+  ApiUrl:
+    Value: !Sub "https://${QualityLinkApi}.execute-api.${AWS::Region}.amazonaws.com"
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  SiteBucketName:
+    Value: !Ref SiteBucket
+  DistributionId:
+    Value: !Ref SiteDistribution
+  SeedFunctionName:
+    Value: !Ref SeedFunction
