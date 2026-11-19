@@ -18,7 +18,6 @@ Globals:
     Architectures: [arm64]
     MemorySize: 256
     Timeout: 10
-    CodeUri: backend/
     Environment:
       Variables:
         BATCHES_TABLE: !Ref BatchesTable
@@ -148,6 +147,7 @@ Resources:
   BatchesFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: backend/
       Handler: batches.handler
       Description: Batch records and client portal (read only)
       Policies:
@@ -166,6 +166,7 @@ Resources:
   InspectionFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: backend/
       Handler: inspection.handler
       Description: Inspection + specification check + hold
       Policies:
@@ -185,6 +186,7 @@ Resources:
   DeviationsFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: backend/
       Handler: deviations.handler
       Description: Deviation investigation and hold clearance
       Policies:
@@ -208,6 +210,7 @@ Resources:
   ReleaseFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: backend/
       Handler: release.handler
       Description: Batch release with electronic signature (only module that can release)
       Policies:
@@ -227,6 +230,7 @@ Resources:
   AuditFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: backend/
       Handler: audit_trail.handler
       Description: Audit trail (read only)
       Policies:
@@ -241,6 +245,7 @@ Resources:
   SeedFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: backend/
       Handler: seed.handler
       Description: Demo data reset (admin only, not exposed through the API)
       Timeout: 60
