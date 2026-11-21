@@ -241,6 +241,24 @@ Resources:
       Events:
         List: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: GET, Path: /audit}}
 
+  # Quality KPI dashboard: read-only Scan on three tables, cannot change anything.
+  MetricsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: metrics.handler
+      Description: Quality KPI dashboard (read only)
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:Scan]
+              Resource:
+                - !GetAtt BatchesTable.Arn
+                - !GetAtt ReadingsTable.Arn
+                - !GetAtt DeviationsTable.Arn
+      Events:
+        Get: {Type: HttpApi, Properties: {ApiId: !Ref QualityLinkApi, Method: GET, Path: /metrics}}
+
   # Admin tool for the demo only: loads sample data and demo users. No API route.
   SeedFunction:
     Type: AWS::Serverless::Function

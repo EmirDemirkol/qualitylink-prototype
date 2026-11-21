@@ -30,6 +30,7 @@ ROUTES = {
     "PATCH /batches/{batchId}/deviations/{deviationId}": "deviations",
     "POST /batches/{batchId}/release": "release",
     "GET /audit": "audit_trail",
+    "GET /metrics": "metrics",
 }
 
 GROUP_OF = {"operator.kelly": "operator", "engineer.murphy": "engineer",

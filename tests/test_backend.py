@@ -144,3 +144,25 @@ def test_client_cannot_get_other_clients_or_unreleased_certificates():
 def test_unknown_role_is_refused():
     s, _ = call("GET", "/batches", "client.larsen", claims={"cognito:username": "x", "cognito:groups": "[]"})
     assert s == 403
+
+
+def test_metrics_dashboard():
+    s, body = call("GET", "/metrics", "engineer.murphy")
+    assert s == 200
+    k = body["kpis"]
+    assert k["batchesOnHold"] == 1 and k["openDeviations"] == 1
+    assert k["firstPassYieldPct"] == 75.0            # 3 of 4 inspected batches had no failure
+    assert 25 < k["avgHoursToRelease"] < 35          # B-24098: first inspection to QA sign-off
+    assert body["failuresByCheck"][0]["count"] == 1
+    assert body["recentFailures"][0]["deviationId"] == "DEV-0412"
+    # Only staff who manage quality can see it
+    assert call("GET", "/metrics", "operator.kelly")[0] == 403
+    assert call("GET", "/metrics", "client.larsen")[0] == 403
+
+
+def test_metrics_follow_a_new_failure():
+    call("POST", "/batches/{batchId}/readings", "operator.kelly", {"batchId": "B-24121"},
+         {"inspectionType": "force", "value": 9.1})
+    k = call("GET", "/metrics", "qa.walsh")[1]["kpis"]
+    assert k["batchesOnHold"] == 2 and k["openDeviations"] == 2
+    assert k["firstPassYieldPct"] == 50.0
