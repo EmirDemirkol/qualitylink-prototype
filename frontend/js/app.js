@@ -8,6 +8,7 @@ import * as batchesView from "./views/batches.js";
 import * as deviationsView from "./views/deviations.js";
 import * as releaseView from "./views/release.js";
 import * as auditView from "./views/audit.js";
+import * as dashboardView from "./views/dashboard.js";
 import * as portalView from "./views/portal.js";
 
 const ROLE_LABEL = { operator: "Operator", engineer: "Quality engineer", qa: "QA approver", client: "Client" };
@@ -22,14 +23,15 @@ const ROUTES = [
   { re: /^#\/batches\/([^/]+)$/, view: batchesView.renderDetail, layout: "staff", nav: "batches", roles: ["engineer", "qa"] },
   { re: /^#\/deviations$/, view: deviationsView.renderList, layout: "staff", nav: "deviations", roles: ["engineer", "qa"] },
   { re: /^#\/deviations\/([^/]+)\/([^/]+)$/, view: deviationsView.renderDetail, layout: "staff", nav: "deviations", roles: ["engineer", "qa"] },
+  { re: /^#\/dashboard$/, view: dashboardView.render, layout: "staff", nav: "dashboard", roles: ["engineer", "qa"] },
   { re: /^#\/audit$/, view: auditView.render, layout: "staff", nav: "audit", roles: ["engineer", "qa"] },
   { re: /^#\/portal$/, view: portalView.renderPortal, layout: "portal", roles: ["client"] },
   { re: /^#\/certificate\/([^/]+)$/, view: portalView.renderCertificate, layout: "auto", nav: "release", roles: ["client", "qa", "engineer"] },
 ];
 
 const NAV = {
-  engineer: [["batches", "#/batches", "Batches"], ["deviations", "#/deviations", "Deviations"], ["audit", "#/audit", "Audit trail"]],
-  qa: [["release", "#/release", "Release queue"], ["batches", "#/batches", "Batches"], ["deviations", "#/deviations", "Deviations"], ["audit", "#/audit", "Audit trail"]],
+  engineer: [["dashboard", "#/dashboard", "Dashboard"], ["batches", "#/batches", "Batches"], ["deviations", "#/deviations", "Deviations"], ["audit", "#/audit", "Audit trail"]],
+  qa: [["release", "#/release", "Release queue"], ["dashboard", "#/dashboard", "Dashboard"], ["batches", "#/batches", "Batches"], ["deviations", "#/deviations", "Deviations"], ["audit", "#/audit", "Audit trail"]],
 };
 
 function staffLayout(user, active) {
