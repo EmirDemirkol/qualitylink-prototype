@@ -29,6 +29,23 @@ All demo accounts use the password `Nuvola-Demo-2026`. The sign-in page also has
 
 Reset the data before a demo with `bash scripts/reset-demo.sh`.
 
+## Design (Figma mock-up)
+
+The screens were designed first as a clickable Figma prototype (Part 2), then built from it. It covers all four roles across 17 screens, including the before/after states (failed reading, deviation closed, batch signed).
+
+**Figma prototype:** [QualityLink Demo](https://www.figma.com/proto/kEW5kE0pHfuDuviAusIeDS/Quality-Link-Demo?node-id=0-1&t=Bk7uk8a5Tz0dTSTI-1)
+
+| Figma screen | Built as |
+|---|---|
+| Sign-in | `frontend/js/views/login.js` + Cognito |
+| Line terminal: inspection, pass/fail, offline | `terminal.js` + `gateway.js` |
+| Batch on hold, deviation steps | `batches.js`, `deviations.js` |
+| QA release checks + e-signature | `release.js` |
+| Audit trail | `audit.js` |
+| Client portal + certificate | `portal.js` |
+
+A standalone HTML copy of the mock-up is in `QualityLink Web Mock-up.html`.
+
 ## Architecture
 
 ```mermaid
@@ -46,6 +63,15 @@ flowchart LR
 ```
 
 Everything runs in **eu-north-1 (Stockholm)** and is defined in one CloudFormation/SAM template (`template.yaml`). Part 2 designs for Ireland (eu-west-1); our AWS Free plan account only allows Stockholm, which is still in the EU, so GDPR data residency holds. Moving to Ireland is a one-line change in `scripts/deploy.sh`.
+
+### Diagrams
+
+Full-quality versions of the architecture diagrams, drawn in draw.io. Open the `.drawio` files in [diagrams.net](https://app.diagrams.net) to edit them.
+
+| Diagram | What it shows | Files |
+|---|---|---|
+| Part 2 proposed design | The full production architecture: edge gateway, Ireland primary region, Frankfurt DR, delivery pipeline | [PNG](docs/architecture/architecture-part2-proposed.png) · [draw.io](docs/architecture/architecture-part2-proposed.drawio) |
+| Prototype view (QL-38) | The same diagram marked up: green = built and live, orange dashed = simulated in the browser, faded = design only | [PNG](docs/architecture/architecture-part3-prototype-view.png) · [draw.io](docs/architecture/architecture-part3-prototype-view.drawio) |
 
 ### Prototype vs the Part 2 design
 
@@ -111,6 +137,7 @@ python tests/local_server.py       # then open http://localhost:8765
 ```
 template.yaml        All AWS infrastructure (CloudFormation + SAM)
 backend/             One Python file per Lambda module, plus common.py
+docs/                Demo script, infrastructure and cost notes, architecture diagrams
 frontend/            Static website: index.html, css/, js/ (no framework)
 scripts/             deploy.sh and reset-demo.sh
 tests/               Backend tests (moto), local server, browser walkthrough
@@ -126,3 +153,4 @@ Built for the AWS Free plan: Lambda, DynamoDB (20 of the always-free 25 read/wri
 - DynamoDB scans are fine for sample data but would need indexes at production volume.
 - The offline gateway is simulated in the browser, not real edge hardware.
 - Certificates are rendered in the browser (print to PDF) rather than stored in S3.
+
