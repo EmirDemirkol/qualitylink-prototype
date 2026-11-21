@@ -44,7 +44,7 @@ The screens were designed first as a clickable Figma prototype (Part 2), then bu
 | Audit trail | `audit.js` |
 | Client portal + certificate | `portal.js` |
 
-A standalone HTML copy of the mock-up is in `QualityLink Web Mock-up.html`.
+![Figma overview: all screens](docs/design/figma-overview.png)
 
 ## Architecture
 
