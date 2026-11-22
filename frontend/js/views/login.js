@@ -18,7 +18,7 @@ export async function render(el) {
       <section class="login-side">
         <div class="brand" style="padding:0">${logo}<span>QualityLink</span></div>
         <h1>Inspection to release, in one traceable record.</h1>
-        <p>Prototype for Meridian Medical Components, built on AWS (Ireland).</p>
+        <p>Prototype for Meridian Medical Components, built on AWS (Stockholm, EU).</p>
         <ul>
           <li>Line terminal records results and checks them against the approved spec</li>
           <li>A failed result holds the batch and opens a deviation automatically</li>
