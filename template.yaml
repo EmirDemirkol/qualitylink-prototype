@@ -3,7 +3,7 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   QualityLink prototype (CSC1057 Group Nuvola). A serverless slice of the
   Part 2 architecture: CloudFront + S3 front end, Cognito sign-in, API Gateway
-  with a JWT authorizer, one Lambda per module and DynamoDB. Region: eu-west-1.
+  with a JWT authorizer, one Lambda per module and DynamoDB. Region: eu-north-1 (Stockholm).
 
 Parameters:
   DemoPassword:
