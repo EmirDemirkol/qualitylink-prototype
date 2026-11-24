@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys the whole QualityLink prototype to AWS (Ireland, eu-west-1).
+# Deploys the whole QualityLink prototype to AWS (Stockholm, eu-north-1).
 # Run it from AWS CloudShell inside the repo folder:   ./scripts/deploy.sh
 #
 # What it does:
